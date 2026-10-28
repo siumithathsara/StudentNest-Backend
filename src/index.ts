@@ -1,15 +1,11 @@
-import dns from "node:dns"
 import express, { type Request, type Response } from "express"
-import mongoose from "mongoose"
 import cors from "cors"
 import dotenv from "dotenv"
-
-// DEV ONLY: some local networks refuse SRV lookups used by mongodb+srv. Remove before deployment.
-dns.setServers(["8.8.8.8", "1.1.1.1"])
+import { connectDB } from "./config/db"
+import authRouter from "./routes/auth.routes"
 
 dotenv.config()
 
-const MONGO_URL = process.env.MONGO_LOCAL_URL || ""
 const PORT = process.env.PORT || 3000
 
 const app = express()
@@ -21,13 +17,12 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok" })
 })
 
-mongoose
-  .connect(MONGO_URL)
-  .then(() => {
-    console.log("DB connected..!")
+app.use("/api/v1/auth", authRouter)
 
+connectDB()
+  .then(() => {
     app.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}`)
     })
   })
-  .catch((err) => console.error("Fail to connect DB..!", err.message))
+  .catch((err) => console.error("Fail to connect DB..!", err.name, err.message))
