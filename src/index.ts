@@ -3,6 +3,8 @@ import cors from "cors"
 import dotenv from "dotenv"
 import { connectDB } from "./config/db"
 import authRouter from "./routes/auth.routes"
+import adminRouter from "./routes/admin.routes"                    
+import notificationRouter from "./routes/notification.routes"
 
 dotenv.config()
 
@@ -18,6 +20,8 @@ app.get("/health", (_req: Request, res: Response) => {
 })
 
 app.use("/api/v1/auth", authRouter)
+app.use("/api/v1/admin", adminRouter)                            
+app.use("/api/v1/notifications", notificationRouter) 
 
 connectDB()
   .then(() => {

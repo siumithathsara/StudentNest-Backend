@@ -2,6 +2,7 @@ import { Request, Response } from "express"
 import bcrypt from "bcryptjs"
 import { Role, Status, User } from "../models/user.model"
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../util/jwt"
+import { notifyAdmins } from "../service/notification.service"
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -18,6 +19,13 @@ export const register = async (req: Request, res: Response) => {
       phone,
       role: role as Role,
       password: await bcrypt.hash(password, 10)
+    })
+
+      await notifyAdmins({
+      type: "USER_REGISTERED",
+      title: `New ${role.toLowerCase()} registered`,
+      message: `${user.name} (${user.email}) is waiting for approval.`,
+      link: "/admin/users"
     })
 
     res.status(201).json({
