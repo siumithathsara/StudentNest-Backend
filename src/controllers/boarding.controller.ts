@@ -131,13 +131,17 @@ export const updateBoarding = async (req: Request, res: Response) => {
       res.status(400).json({ message: "lat and lng must be sent together" })
       return
     }
-    if (b.lat !== undefined) {
+        if (b.lat !== undefined) {
       if (!isInSriLanka(b.lat, b.lng)) {
         res.status(400).json({ message: "Location must be inside Sri Lanka" })
         return
       }
-      doc.location = { type: "Point", coordinates: [b.lng, b.lat] }
-      needsReview = true
+      const [currentLng, currentLat] = doc.location.coordinates
+      const moved = Math.abs(b.lat - currentLat) > 1e-6 || Math.abs(b.lng - currentLng) > 1e-6
+      if (moved) {
+        doc.location = { type: "Point", coordinates: [b.lng, b.lat] }
+        needsReview = true
+      }
     }
 
     if (b.totalRooms !== undefined) doc.totalRooms = b.totalRooms

@@ -2,6 +2,8 @@ import { Request, Response } from "express"
 import mongoose, { isValidObjectId } from "mongoose"
 import { Role, Status, User } from "../models/user.model"
 import { notify } from "../service/notification.service"
+import { Boarding, BoardingStatus } from "../models/boarding.model"
+import { Campus } from "../models/campus.model"
 
 const TRANSITIONS: Record<string, Status[]> = {
   APPROVED: [Status.PENDING_APPROVAL, Status.REJECTED, Status.SUSPENDED],
@@ -15,12 +17,15 @@ const toMap = (rows: CountRow[]) => Object.fromEntries(rows.map((r) => [r._id, r
 export const getStats = async (_req: Request, res: Response) => {
   try {
     const match = { $match: { role: { $ne: Role.ADMIN } } }
-    const [byStatus, byRole] = await Promise.all([
+    const [byStatus, byRole, boardingsByStatus, campuses] = await Promise.all([
       User.aggregate<CountRow>([match, { $group: { _id: "$status", count: { $sum: 1 } } }]),
-      User.aggregate<CountRow>([match, { $group: { _id: "$role", count: { $sum: 1 } } }])
+      User.aggregate<CountRow>([match, { $group: { _id: "$role", count: { $sum: 1 } } }]),
+      Boarding.aggregate<CountRow>([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+      Campus.countDocuments()
     ])
     const s = toMap(byStatus)
     const r = toMap(byRole)
+    const b = toMap(boardingsByStatus)
 
     res.json({
       message: "Success",
@@ -33,7 +38,14 @@ export const getStats = async (_req: Request, res: Response) => {
           suspended: s.SUSPENDED ?? 0,
           students: r.STUDENT ?? 0,
           owners: r.OWNER ?? 0
-        }
+        },
+        boardings: {
+          total: (b.PENDING ?? 0) + (b.APPROVED ?? 0) + (b.REJECTED ?? 0),
+          pending: b.PENDING ?? 0,
+          approved: b.APPROVED ?? 0,
+          rejected: b.REJECTED ?? 0
+        },
+        campuses
       }
     })
   } catch (err) {
@@ -113,6 +125,87 @@ export const setUserStatus = async (req: Request, res: Response) => {
     })
 
     res.json({ message: `User ${status.toLowerCase()}` })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: "Internal server error" })
+  }
+}
+
+export const listBoardingsAdmin = async (_req: Request, res: Response) => {
+  try {
+    const { page, limit, status } = res.locals.query
+    const filter = status ? { status } : {}
+
+    const [rows, total] = await Promise.all([
+      Boarding.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate("owner", "name email phone")
+        .lean(),
+      Boarding.countDocuments(filter)
+    ])
+
+    const items = rows.map((b: any) => ({
+      id: b._id.toString(),
+      title: b.title,
+      description: b.description,
+      city: b.city,
+      address: b.address,
+      monthlyRent: b.monthlyRent,
+      totalRooms: b.totalRooms,
+      availableRooms: b.availableRooms,
+      facilities: b.facilities,
+      lat: b.location.coordinates[1],
+      lng: b.location.coordinates[0],
+      images: b.images,
+      status: b.status,
+      rejectionReason: b.rejectionReason,
+      createdAt: b.createdAt,
+      owner: b.owner ? { id: b.owner._id.toString(), name: b.owner.name, email: b.owner.email, phone: b.owner.phone } : null
+    }))
+
+    res.json({ message: "Success", data: { items, total, page, limit } })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: "Internal server error" })
+  }
+}
+
+export const setBoardingStatus = async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id)
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ message: "Invalid id" })
+      return
+    }
+    const { status, reason } = req.body as { status: "APPROVED" | "REJECTED"; reason?: string }
+
+    const boarding = await Boarding.findById(id)
+    if (!boarding) {
+      res.status(404).json({ message: "Boarding not found" })
+      return
+    }
+    if (boarding.status === (status as BoardingStatus)) {
+      res.status(409).json({ message: `Boarding is already ${status.toLowerCase()}` })
+      return
+    }
+
+    boarding.status = status as BoardingStatus
+    boarding.rejectionReason = status === "APPROVED" ? undefined : reason
+    await boarding.save()
+
+    await notify(boarding.owner, {
+      type: `BOARDING_${status}`,
+      title: `Boarding ${status.toLowerCase()}`,
+      message:
+        status === "APPROVED"
+          ? `"${boarding.title}" is now visible to students.`
+          : `"${boarding.title}" was rejected: ${reason}. Update it and it will be reviewed again.`,
+      link: "/owner/boardings"
+    })
+
+    res.json({ message: `Boarding ${status.toLowerCase()}` })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: "Internal server error" })

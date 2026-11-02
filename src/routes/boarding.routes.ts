@@ -19,7 +19,18 @@ const ownerOnly = [authenticate, requireRole([Role.OWNER])]
 router.get("/mine", ...ownerOnly, myBoardings) 
 router.get("/mine/:id", ...ownerOnly, getMyBoarding)
 
-router.post("/", ...ownerOnly, uploadImagesMiddleware, validate(createBoardingSchema), createBoarding)
+// router.post("/", ...ownerOnly, uploadImagesMiddleware, validate(createBoardingSchema), createBoarding)
+router.post(
+  "/",
+  ...ownerOnly,
+  uploadImagesMiddleware,
+  (req, _res, next) => {
+    console.log("BODY KEYS:", Object.keys(req.body), "FILES:", (req.files as unknown[] | undefined)?.length)
+    next()
+  },
+  validate(createBoardingSchema),
+  createBoarding
+)
 router.put("/:id", ...ownerOnly, uploadImagesMiddleware, validate(updateBoardingSchema), updateBoarding)
 router.delete("/:id", ...ownerOnly, deleteBoarding)
 
