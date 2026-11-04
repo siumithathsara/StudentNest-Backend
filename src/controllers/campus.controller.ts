@@ -28,7 +28,7 @@ export const createCampus = async (req: Request, res: Response) => {
     res.status(201).json({ message: "Campus created", data: toDto(campus) })
   } catch (err: any) {
     if (err?.code === 11000) {
-      res.status(409).json({ message: "A campus with this name already exists" })
+      res.status(409).json({ message: "This campus already exists in this city" })
       return
     }
     console.error(err)
@@ -56,7 +56,7 @@ export const updateCampus = async (req: Request, res: Response) => {
     res.json({ message: "Campus updated", data: toDto(campus) })
   } catch (err: any) {
     if (err?.code === 11000) {
-      res.status(409).json({ message: "A campus with this name already exists" })
+      res.status(409).json({ message: "This campus already exists in this city" })
       return
     }
     console.error(err)

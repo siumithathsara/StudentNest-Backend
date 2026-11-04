@@ -44,20 +44,35 @@ const request = async <T>(path: string, params: Record<string, string>): Promise
 
 const cityOf = (a?: Record<string, string>) => a?.city || a?.town || a?.village || a?.suburb || a?.county || ""
 
+const variants = (q: string) => {
+  const list = [q]
+  const simpler = q
+    .replace(/\b(campus|university|institute|college)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  if (simpler.length >= 3 && simpler.toLowerCase() !== q.toLowerCase()) list.push(simpler)
+  return list
+}
+
 export const searchPlaces = async (q: string) => {
-  const rows = await request<NominatimPlace[]>("/search", {
-    q,
-    format: "jsonv2",
-    countrycodes: "lk",
-    limit: "5",
-    addressdetails: "1"
-  })
-  return rows.map((r) => ({
-    name: r.display_name ?? "",
-    lat: Number(r.lat),
-    lng: Number(r.lon),
-    city: cityOf(r.address)
-  }))
+  for (const text of variants(q)) {
+    const rows = await request<NominatimPlace[]>("/search", {
+      q: text,
+      format: "jsonv2",
+      countrycodes: "lk",
+      limit: "5",
+      addressdetails: "1"
+    })
+    if (rows.length > 0) {
+      return rows.map((r) => ({
+        name: r.display_name ?? "",
+        lat: Number(r.lat),
+        lng: Number(r.lon),
+        city: cityOf(r.address)
+      }))
+    }
+  }
+  return []
 }
 
 export const reversePlace = async (lat: number, lng: number) => {
