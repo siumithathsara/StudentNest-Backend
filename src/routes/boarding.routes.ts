@@ -1,4 +1,5 @@
 import { Router } from "express"
+import { compareBoardings, getBoardingDetail, listBoardings } from "../controllers/browse.controller"
 import {
   createBoarding,
   deleteBoarding,
@@ -9,29 +10,30 @@ import {
 import { authenticate } from "../middleware/auth"
 import { requireRole } from "../middleware/role"
 import { uploadImagesMiddleware } from "../middleware/upload"
-import { validate } from "../middleware/validate"
+import { validate, validateQuery } from "../middleware/validate"
 import { Role } from "../models/user.model"
-import { createBoardingSchema, updateBoardingSchema } from "../validators/boarding.validator"
+import {
+  browseQuerySchema,
+  compareQuerySchema,
+  createBoardingSchema,
+  detailQuerySchema,
+  updateBoardingSchema
+} from "../validators/boarding.validator"
 
 const router = Router()
 const ownerOnly = [authenticate, requireRole([Role.OWNER])]
+const studentOnly = [authenticate, requireRole([Role.STUDENT])]
 
-router.get("/mine", ...ownerOnly, myBoardings) 
+// ── Owner ──
+router.get("/mine", ...ownerOnly, myBoardings)
 router.get("/mine/:id", ...ownerOnly, getMyBoarding)
-
-// router.post("/", ...ownerOnly, uploadImagesMiddleware, validate(createBoardingSchema), createBoarding)
-router.post(
-  "/",
-  ...ownerOnly,
-  uploadImagesMiddleware,
-  (req, _res, next) => {
-    console.log("BODY KEYS:", Object.keys(req.body), "FILES:", (req.files as unknown[] | undefined)?.length)
-    next()
-  },
-  validate(createBoardingSchema),
-  createBoarding
-)
+router.post("/", ...ownerOnly, uploadImagesMiddleware, validate(createBoardingSchema), createBoarding)
 router.put("/:id", ...ownerOnly, uploadImagesMiddleware, validate(updateBoardingSchema), updateBoarding)
 router.delete("/:id", ...ownerOnly, deleteBoarding)
+
+// ── Student ──
+router.get("/", ...studentOnly, validateQuery(browseQuerySchema), listBoardings)
+router.get("/compare", ...studentOnly, validateQuery(compareQuerySchema), compareBoardings) // "/:id" ට කලින්
+router.get("/:id", ...studentOnly, validateQuery(detailQuerySchema), getBoardingDetail)
 
 export default router
