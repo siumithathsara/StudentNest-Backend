@@ -10,6 +10,7 @@ import campusRouter from "./routes/campus.routes"
 import geoRouter from "./routes/geo.routes"
 import notificationRouter from "./routes/notification.routes"
 import favoriteRouter from "./routes/favorite.routes"
+import bookingRouter from "./routes/booking.routes"
 
 dotenv.config()
 
@@ -31,6 +32,7 @@ app.use("/api/v1/campuses", campusRouter)
 app.use("/api/v1/boardings", boardingRouter)
 app.use("/api/v1/geo", geoRouter)
 app.use("/api/v1/favorites", favoriteRouter)
+app.use("/api/v1/bookings", bookingRouter)
 
 app.use(errorHandler)
 

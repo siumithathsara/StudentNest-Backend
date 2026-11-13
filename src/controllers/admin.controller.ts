@@ -4,6 +4,7 @@ import { Role, Status, User } from "../models/user.model"
 import { notify } from "../service/notification.service"
 import { Boarding, BoardingStatus } from "../models/boarding.model"
 import { Campus } from "../models/campus.model"
+import { Booking } from "../models/booking.model"
 
 const TRANSITIONS: Record<string, Status[]> = {
   APPROVED: [Status.PENDING_APPROVAL, Status.REJECTED, Status.SUSPENDED],
@@ -17,15 +18,17 @@ const toMap = (rows: CountRow[]) => Object.fromEntries(rows.map((r) => [r._id, r
 export const getStats = async (_req: Request, res: Response) => {
   try {
     const match = { $match: { role: { $ne: Role.ADMIN } } }
-    const [byStatus, byRole, boardingsByStatus, campuses] = await Promise.all([
+    const [byStatus, byRole, boardingsByStatus, campuses, bookingsByStatus] = await Promise.all([
       User.aggregate<CountRow>([match, { $group: { _id: "$status", count: { $sum: 1 } } }]),
       User.aggregate<CountRow>([match, { $group: { _id: "$role", count: { $sum: 1 } } }]),
       Boarding.aggregate<CountRow>([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
-      Campus.countDocuments()
+      Campus.countDocuments(),
+      Booking.aggregate<CountRow>([{ $group: { _id: "$status", count: { $sum: 1 } } }])
     ])
     const s = toMap(byStatus)
     const r = toMap(byRole)
     const b = toMap(boardingsByStatus)
+    const bk = toMap(bookingsByStatus)
 
     res.json({
       message: "Success",
@@ -44,6 +47,11 @@ export const getStats = async (_req: Request, res: Response) => {
           pending: b.PENDING ?? 0,
           approved: b.APPROVED ?? 0,
           rejected: b.REJECTED ?? 0
+        },
+        bookings: {
+          total: (bk.PENDING ?? 0) + (bk.APPROVED ?? 0) + (bk.REJECTED ?? 0) + (bk.CANCELLED ?? 0),
+          pending: bk.PENDING ?? 0,
+          approved: bk.APPROVED ?? 0
         },
         campuses
       }

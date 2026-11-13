@@ -4,6 +4,8 @@ import { Boarding, BoardingStatus } from "../models/boarding.model"
 import { Campus } from "../models/campus.model"
 import { Favorite } from "../models/favorite.model"
 import { estimateTravel } from "../util/geo"
+import { Booking, BookingStatus } from "../models/booking.model"
+import { buildContact, getRequestBlockedReason } from "../util/bookingRules"
 
 const approx = (n: number) => Math.round(n * 1000) / 1000
 
@@ -83,7 +85,7 @@ export const listBoardings = async (_req: Request, res: Response) => {
       items = r.items.map(toCard)
       total = r.total[0]?.n ?? 0
     } else {
-     
+
       const sort: Record<string, 1 | -1> =
         q.sort === "price_asc"
           ? { monthlyRent: 1, _id: 1 }
@@ -114,7 +116,7 @@ export const getBoardingDetail = async (req: Request, res: Response) => {
       return
     }
 
-    const b: any = await Boarding.findOne({ _id: id, status: BoardingStatus.APPROVED }).populate("owner", "name").lean()
+    const b: any = await Boarding.findOne({ _id: id, status: BoardingStatus.APPROVED }).populate("owner", "name email phone").lean()
     if (!b) {
       res.status(404).json({ message: "Boarding not found" })
       return
@@ -147,6 +149,13 @@ export const getBoardingDetail = async (req: Request, res: Response) => {
 
     const isFavorite = !!(await Favorite.exists({ student: req.user!.id, boarding: id }))
 
+    const [myBooking, hasApprovedBooking, pendingCount] = await Promise.all([
+      Booking.findOne({ student: req.user!.id, boarding: id, active: true }).select("status moveInDate"),
+      Booking.exists({ student: req.user!.id, status: BookingStatus.APPROVED }),
+      Booking.countDocuments({ student: req.user!.id, status: BookingStatus.PENDING })
+    ])
+    const approved = myBooking?.status === BookingStatus.APPROVED
+
     res.json({
       message: "Success",
       data: {
@@ -165,8 +174,20 @@ export const getBoardingDetail = async (req: Request, res: Response) => {
         nearbyCampuses: nearby.map((c) => ({ id: c._id.toString(), name: c.name, city: c.city, ...estimateTravel(c.distanceMeters) })),
         selectedCampus,
         isFavorite,
-       
-        contactVisible: false
+        myBooking: myBooking
+          ? { id: myBooking._id.toString(), status: myBooking.status, moveInDate: myBooking.moveInDate }
+          : null,
+
+        requestBlockedReason: myBooking
+          ? null
+          : getRequestBlockedReason({
+            availableRooms: b.availableRooms,
+            hasApprovedBooking: !!hasApprovedBooking,
+            pendingCount
+          }),
+
+        contactVisible: approved,
+        contact: approved ? buildContact(b, b.owner) : null
       }
     })
   } catch (err) {

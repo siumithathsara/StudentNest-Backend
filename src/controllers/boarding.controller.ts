@@ -5,6 +5,7 @@ import { Boarding, BoardingStatus, IBoarding } from "../models/boarding.model"
 import { notifyAdmins } from "../service/notification.service"
 import { deleteImages, uploadImages } from "../service/upload.service"
 import { isInSriLanka } from "../util/geo"
+import { Booking } from "../models/booking.model"
 
 export const toBoardingDto = (b: IBoarding) => ({
   id: b._id.toString(),
@@ -43,7 +44,7 @@ export const getMyBoarding = async (req: Request, res: Response) => {
       res.status(400).json({ message: "Invalid id" })
       return
     }
-  
+
     const b = await Boarding.findOne({ _id: id, owner: req.user!.id })
     if (!b) {
       res.status(404).json({ message: "Boarding not found" })
@@ -122,7 +123,7 @@ export const updateBoarding = async (req: Request, res: Response) => {
 
     for (const key of REVIEW_FIELDS) {
       if (b[key] !== undefined && b[key] !== doc[key]) {
-        ;(doc as any)[key] = b[key]
+        ; (doc as any)[key] = b[key]
         needsReview = true
       }
     }
@@ -131,7 +132,7 @@ export const updateBoarding = async (req: Request, res: Response) => {
       res.status(400).json({ message: "lat and lng must be sent together" })
       return
     }
-        if (b.lat !== undefined) {
+    if (b.lat !== undefined) {
       if (!isInSriLanka(b.lat, b.lng)) {
         res.status(400).json({ message: "Location must be inside Sri Lanka" })
         return
@@ -152,7 +153,7 @@ export const updateBoarding = async (req: Request, res: Response) => {
       return
     }
 
-    
+
     const incoming = filesOf(req)
     const removePaths = (b.removeImages as string[] | undefined) ?? []
     const removed = doc.images.filter((i) => removePaths.includes(i.path))
@@ -209,11 +210,17 @@ export const deleteBoarding = async (req: Request, res: Response) => {
       res.status(400).json({ message: "Invalid id" })
       return
     }
-    const doc = await Boarding.findOneAndDelete({ _id: id, owner: req.user!.id })
+    const doc = await Boarding.findOne({ _id: id, owner: req.user!.id })
     if (!doc) {
       res.status(404).json({ message: "Boarding not found" })
       return
     }
+
+    if (await Booking.exists({ boarding: doc._id, active: true })) {
+      res.status(409).json({ message: "This boarding has active booking requests. Reject or cancel them first." })
+      return
+    }
+    await doc.deleteOne()
     await deleteImages(doc.images.map((i) => i.path))
     res.json({ message: "Boarding deleted" })
   } catch (err) {
