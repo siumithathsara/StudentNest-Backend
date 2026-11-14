@@ -9,6 +9,6 @@ import { chatSchema } from "../validators/chat.validator"
 
 const router = Router()
 
-router.post("/", authenticate, requireRole([Role.STUDENT]), chatLimiter, validate(chatSchema), chat)
+router.post("/", authenticate, requireRole([Role.STUDENT, Role.OWNER, Role.ADMIN]), chatLimiter, validate(chatSchema), chat)
 
 export default router

@@ -6,28 +6,9 @@ import { Favorite } from "../models/favorite.model"
 import { estimateTravel } from "../util/geo"
 import { Booking, BookingStatus } from "../models/booking.model"
 import { buildContact, getRequestBlockedReason } from "../util/bookingRules"
+import { approx, searchBoardings, toCard, toPoint } from "../service/search.service"
 
-const approx = (n: number) => Math.round(n * 1000) / 1000
-
-const toPoint = (lng: number, lat: number) => ({
-  type: "Point" as const,
-  coordinates: [lng, lat] as [number, number]
-})
-
-export const toCard = (b: any) => ({
-  id: b._id.toString(),
-  title: b.title,
-  city: b.city,
-  monthlyRent: b.monthlyRent,
-  totalRooms: b.totalRooms,
-  availableRooms: b.availableRooms,
-  facilities: b.facilities,
-  coverImage: (b.images?.[0]?.url as string | undefined) ?? null,
-  imageCount: (b.images?.length as number | undefined) ?? 0,
-  lat: approx(b.location.coordinates[1]),
-  lng: approx(b.location.coordinates[0]),
-  ...(b.distanceMeters !== undefined ? { travel: estimateTravel(b.distanceMeters) } : {})
-})
+export { toCard }
 
 type CampusDistanceRow = { _id: mongoose.Types.ObjectId; name: string; city: string; distanceMeters: number }
 
@@ -35,73 +16,13 @@ export const listBoardings = async (_req: Request, res: Response) => {
   try {
     const q = res.locals.query
 
-    const match: Record<string, unknown> = { status: BoardingStatus.APPROVED }
-    if (q.minRent !== undefined || q.maxRent !== undefined) {
-      match.monthlyRent = {
-        ...(q.minRent !== undefined && { $gte: q.minRent }),
-        ...(q.maxRent !== undefined && { $lte: q.maxRent })
-      }
-    }
-    if (q.facilities?.length) match.facilities = { $all: q.facilities }
-    if (q.availableOnly) match.availableRooms = { $gt: 0 }
-
-    const skip = (q.page - 1) * q.limit
-
-    let items: unknown[]
-    let total: number
-    let campusInfo: { id: string; name: string; city: string } | null = null
-
-    if (q.campusId) {
-      const campus = await Campus.findById(q.campusId)
-      if (!campus) {
-        res.status(404).json({ message: "Campus not found" })
-        return
-      }
-      campusInfo = { id: campus._id.toString(), name: campus.name, city: campus.city }
-
-      const sortStage: Record<string, 1 | -1> =
-        q.sort === "price_asc"
-          ? { monthlyRent: 1, _id: 1 }
-          : q.sort === "price_desc"
-            ? { monthlyRent: -1, _id: 1 }
-            : q.sort === "newest"
-              ? { createdAt: -1, _id: 1 }
-              : { distanceMeters: 1, _id: 1 }
-
-      const [r] = await Boarding.aggregate([
-        {
-          $geoNear: {
-            near: toPoint(campus.location.coordinates[0], campus.location.coordinates[1]),
-            distanceField: "distanceMeters",
-            maxDistance: q.radiusKm * 1000,
-            spherical: true,
-            query: match
-          }
-        },
-        { $project: { description: 0, address: 0, owner: 0 } },
-        { $sort: sortStage },
-        { $facet: { items: [{ $skip: skip }, { $limit: q.limit }], total: [{ $count: "n" }] } }
-      ])
-      items = r.items.map(toCard)
-      total = r.total[0]?.n ?? 0
-    } else {
-
-      const sort: Record<string, 1 | -1> =
-        q.sort === "price_asc"
-          ? { monthlyRent: 1, _id: 1 }
-          : q.sort === "price_desc"
-            ? { monthlyRent: -1, _id: 1 }
-            : { createdAt: -1, _id: 1 }
-
-      const [rows, count] = await Promise.all([
-        Boarding.find(match).select("-description -address -owner").sort(sort).skip(skip).limit(q.limit).lean(),
-        Boarding.countDocuments(match)
-      ])
-      items = rows.map(toCard)
-      total = count
+    const result = await searchBoardings(q)
+    if (!result) {
+      res.status(404).json({ message: "Campus not found" })
+      return
     }
 
-    res.json({ message: "Success", data: { items, total, page: q.page, limit: q.limit, campus: campusInfo } })
+    res.json({ message: "Success", data: { ...result, page: q.page, limit: q.limit } })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: "Internal server error" })
@@ -177,15 +98,14 @@ export const getBoardingDetail = async (req: Request, res: Response) => {
         myBooking: myBooking
           ? { id: myBooking._id.toString(), status: myBooking.status, moveInDate: myBooking.moveInDate }
           : null,
-
         requestBlockedReason: myBooking
           ? null
           : getRequestBlockedReason({
-            availableRooms: b.availableRooms,
-            hasApprovedBooking: !!hasApprovedBooking,
-            pendingCount
-          }),
-
+              availableRooms: b.availableRooms,
+              hasApprovedBooking: !!hasApprovedBooking,
+              pendingCount
+            }),
+   
         contactVisible: approved,
         contact: approved ? buildContact(b, b.owner) : null
       }

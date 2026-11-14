@@ -1,4 +1,3 @@
-import mongoose from "mongoose"
 import { Boarding, BoardingStatus } from "../models/boarding.model"
 import { Campus } from "../models/campus.model"
 import { estimateTravel } from "../util/geo"
@@ -39,23 +38,68 @@ export interface SearchParams {
   limit: number
 }
 
-type CampusDistanceRow = { _id: mongoose.Types.ObjectId; name: string; city: string; distanceMeters: number }
-
 export const searchBoardings = async (q: SearchParams) => {
- 
-    const match: Record<string, unknown> = { status: BoardingStatus.APPROVED }
-    if (q.minRent !== undefined || q.maxRent !== undefined) {
-      match.monthlyRent = {
-        ...(q.minRent !== undefined && { $gte: q.minRent }),
-        ...(q.maxRent !== undefined && { $lte: q.maxRent })
-      }
+  const match: Record<string, unknown> = { status: BoardingStatus.APPROVED }
+  if (q.minRent !== undefined || q.maxRent !== undefined) {
+    match.monthlyRent = {
+      ...(q.minRent !== undefined && { $gte: q.minRent }),
+      ...(q.maxRent !== undefined && { $lte: q.maxRent })
     }
-    if (q.facilities?.length) match.facilities = { $all: q.facilities }
-    if (q.availableOnly) match.availableRooms = { $gt: 0 }
+  }
+  if (q.facilities?.length) match.facilities = { $all: q.facilities }
+  if (q.availableOnly) match.availableRooms = { $gt: 0 }
 
-    const skip = (q.page - 1) * q.limit
+  const skip = (q.page - 1) * q.limit
 
-    let items: unknown[]
-    let total: number
-    let campusInfo: { id: string; name: string; city: string } | null = null
+  let items: ReturnType<typeof toCard>[]
+  let total: number
+  let campusInfo: { id: string; name: string; city: string } | null = null
+
+  if (q.campusId) {
+    const campus = await Campus.findById(q.campusId)
+    if (!campus) return null
+    campusInfo = { id: campus._id.toString(), name: campus.name, city: campus.city }
+
+    const sortStage: Record<string, 1 | -1> =
+      q.sort === "price_asc"
+        ? { monthlyRent: 1, _id: 1 }
+        : q.sort === "price_desc"
+          ? { monthlyRent: -1, _id: 1 }
+          : q.sort === "newest"
+            ? { createdAt: -1, _id: 1 }
+            : { distanceMeters: 1, _id: 1 }
+
+    const [r] = await Boarding.aggregate([
+      {
+        $geoNear: {
+          near: toPoint(campus.location.coordinates[0], campus.location.coordinates[1]),
+          distanceField: "distanceMeters",
+          maxDistance: q.radiusKm * 1000,
+          spherical: true,
+          query: match
+        }
+      },
+      { $project: { description: 0, address: 0, owner: 0 } },
+      { $sort: sortStage },
+      { $facet: { items: [{ $skip: skip }, { $limit: q.limit }], total: [{ $count: "n" }] } }
+    ])
+    items = r.items.map(toCard)
+    total = r.total[0]?.n ?? 0
+  } else {
+    const sort: Record<string, 1 | -1> =
+      q.sort === "price_asc"
+        ? { monthlyRent: 1, _id: 1 }
+        : q.sort === "price_desc"
+          ? { monthlyRent: -1, _id: 1 }
+          : { createdAt: -1, _id: 1 }
+
+    const [rows, count] = await Promise.all([
+      Boarding.find(match).select("-description -address -owner").sort(sort).skip(skip).limit(q.limit).lean(),
+      Boarding.countDocuments(match)
+    ])
+    items = rows.map(toCard)
+    total = count
+  }
+
+  return { items, total, campus: campusInfo }
 }
