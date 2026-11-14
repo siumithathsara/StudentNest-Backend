@@ -11,6 +11,7 @@ import geoRouter from "./routes/geo.routes"
 import notificationRouter from "./routes/notification.routes"
 import favoriteRouter from "./routes/favorite.routes"
 import bookingRouter from "./routes/booking.routes"
+import chatRouter from "./routes/chat.routes"
 
 dotenv.config()
 
@@ -33,6 +34,7 @@ app.use("/api/v1/boardings", boardingRouter)
 app.use("/api/v1/geo", geoRouter)
 app.use("/api/v1/favorites", favoriteRouter)
 app.use("/api/v1/bookings", bookingRouter)
+app.use("/api/v1/chat", chatRouter)
 
 app.use(errorHandler)
 
