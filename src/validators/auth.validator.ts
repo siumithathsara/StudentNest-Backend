@@ -30,3 +30,10 @@ export const loginSchema = z.object({
 export const refreshSchema = z.object({
   refreshToken: z.string().min(10, "refreshToken is required")
 })
+export const forgotPasswordSchema = z.object({
+  email
+})
+export const resetPasswordSchema = z.object({
+  token: z.string().min(20, "Invalid reset link").max(200, "Invalid reset link"),
+  password
+})

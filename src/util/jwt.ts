@@ -4,6 +4,7 @@ import { Role } from "../models/user.model"
 export interface TokenPayload {
   sub: string
   role?: Role
+  iat?: number
 }
 
 // access token

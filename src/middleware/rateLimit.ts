@@ -25,3 +25,9 @@ export const geoLimiter = rateLimit({
   keyGenerator: (req) => req.user?.id ?? "anonymous",
   message: { message: "Too many searches. Please wait a moment." }
 })
+export const forgotLimiter = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  message: { message: "Too many reset requests. Please try again in an hour." }
+})

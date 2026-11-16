@@ -29,6 +29,9 @@ export interface IUser extends Document {
   reapplyCount: number
   approvedBy?: mongoose.Types.ObjectId
   approvedAt?: Date
+  passwordResetTokenHash?: string
+  passwordResetExpires?: Date
+  passwordChangedAt?: Date
 }
 
 const userSchema = new Schema<IUser>(
@@ -45,7 +48,11 @@ const userSchema = new Schema<IUser>(
     rejectionReason: String,
     reapplyCount: { type: Number, default: 0 },
     approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
-    approvedAt: Date
+    approvedAt: Date,
+    passwordResetTokenHash: { type: String, select: false },
+    passwordResetExpires: { type: Date, select: false },
+    passwordChangedAt: Date
+
   },
   { timestamps: true }
 )
