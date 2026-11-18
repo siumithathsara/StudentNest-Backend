@@ -54,12 +54,14 @@ const variants = (q: string) => {
   return list
 }
 
+// search for places in Sri Lanka by text; tries each query variant
+
 export const searchPlaces = async (q: string) => {
   for (const text of variants(q)) {
     const rows = await request<NominatimPlace[]>("/search", {
       q: text,
       format: "jsonv2",
-      countrycodes: "lk",
+      countrycodes: "lk", // limit to srilanka using country code 
       limit: "5",
       addressdetails: "1"
     })
