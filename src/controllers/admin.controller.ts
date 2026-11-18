@@ -103,11 +103,7 @@ export const setUserStatus = async (req: Request, res: Response) => {
       return
     }
     const { status, reason } = req.body as { status: "APPROVED" | "REJECTED" | "SUSPENDED"; reason?: string }
-    
-    if (status !== "APPROVED" && !reason?.trim()) {
-      res.status(400).json({ message: "Reason is required when rejecting or suspending" })
-      return
-    }
+   
     const user = await User.findById(id)
     if (!user || user.role === Role.ADMIN) {
       res.status(404).json({ message: "User not found" })
