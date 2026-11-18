@@ -19,6 +19,7 @@ export const getStats = async (_req: Request, res: Response) => {
   try {
     const match = { $match: { role: { $ne: Role.ADMIN } } }
     const [byStatus, byRole, boardingsByStatus, campuses, bookingsByStatus] = await Promise.all([
+
       User.aggregate<CountRow>([match, { $group: { _id: "$status", count: { $sum: 1 } } }]),
       User.aggregate<CountRow>([match, { $group: { _id: "$role", count: { $sum: 1 } } }]),
       Boarding.aggregate<CountRow>([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
@@ -102,7 +103,11 @@ export const setUserStatus = async (req: Request, res: Response) => {
       return
     }
     const { status, reason } = req.body as { status: "APPROVED" | "REJECTED" | "SUSPENDED"; reason?: string }
-
+    
+    if (status !== "APPROVED" && !reason?.trim()) {
+      res.status(400).json({ message: "Reason is required when rejecting or suspending" })
+      return
+    }
     const user = await User.findById(id)
     if (!user || user.role === Role.ADMIN) {
       res.status(404).json({ message: "User not found" })
